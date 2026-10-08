@@ -1,0 +1,13 @@
+numpy>=1.26
+fastapi>=0.110
+uvicorn>=0.29
+python-multipart>=0.0.9
+
+# Optional, install what you need:
+#   pip install sentence-transformers   # real semantic embeddings & cross-encoder reranking
+#   pip install faster-whisper          # transcribe audio/video files
+#   pip install anthropic               # Claude LLM answers (set ANTHROPIC_API_KEY)
+#   pip install groq                    # Groq fast LLM answers (set GROQ_API_KEY)
+#   pip install openai                  # OpenRouter or OpenAI-compatible answers
+#   pip install huggingface_hub         # Hugging Face serverless answers (set HF_TOKEN)
+

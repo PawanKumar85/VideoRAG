@@ -1,0 +1,1820 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VideoRAG · Timestamped Video Search</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-base: #09090b;
+    --bg-surface: rgba(18, 18, 22, 0.75);
+    --bg-card: rgba(24, 24, 28, 0.7);
+    --bg-card-hover: rgba(32, 32, 38, 0.85);
+    --bg-input: rgba(20, 20, 24, 0.8);
+    --border-subtle: rgba(255, 255, 255, 0.08);
+    --border-dashed: rgba(255, 255, 255, 0.14);
+    --border-focus: rgba(255, 255, 255, 0.3);
+    --text-primary: #f4f4f5;
+    --text-secondary: #a1a1aa;
+    --text-muted: #71717a;
+    --accent-emerald: #10b981;
+    --accent-cyan: #06b6d4;
+    --accent-indigo: #6366f1;
+    --accent-glow: rgba(16, 185, 129, 0.15);
+    --radius-pill: 9999px;
+    --radius-card: 16px;
+    --radius-sm: 8px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  
+  body {
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Interactive Background Canvas (Canvas UI signature) */
+  #bgCanvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.65;
+  }
+
+  /* App Layout Container */
+  .app-container {
+    position: relative;
+    z-index: 1;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: transparent;
+  }
+
+  /* Canvas UI Top Navigation Bar */
+  .top-navbar {
+    height: 56px;
+    background: rgba(9, 9, 11, 0.8);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    flex-shrink: 0;
+  }
+  .nav-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .brand-logo {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    text-decoration: none;
+    color: var(--text-primary);
+  }
+  .logo-icon-wrap {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #10b981, #06b6d4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.35);
+  }
+  .logo-icon-wrap svg {
+    width: 15px;
+    height: 15px;
+    fill: #fff;
+  }
+  .brand-title {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+  }
+  .pill-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    padding: 3px 8px;
+    border-radius: var(--radius-pill);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .nav-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(16, 185, 129, 0.08);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    padding: 4px 10px;
+    border-radius: var(--radius-pill);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #34d399;
+  }
+  .status-dot-pulse {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #10b981;
+    box-shadow: 0 0 8px #10b981;
+    animation: pulseGlow 2s infinite;
+  }
+  @keyframes pulseGlow {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.85); }
+  }
+
+  /* Main Two-Pane Split Body */
+  .workspace-body {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Crosshair marker for Canvas UI aesthetic */
+  .crosshair-corner {
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    pointer-events: none;
+    z-index: 10;
+  }
+  .crosshair-corner::before,
+  .crosshair-corner::after {
+    content: '';
+    position: absolute;
+    background: var(--text-muted);
+  }
+  .crosshair-corner::before {
+    top: 4px; left: 0; width: 9px; height: 1px;
+  }
+  .crosshair-corner::after {
+    top: 0; left: 4px; width: 1px; height: 9px;
+  }
+  .crosshair-tl { top: -4px; left: -4px; }
+  .crosshair-tr { top: -4px; right: -4px; }
+
+  /* ========================================================================= */
+  /* LEFT: Document & Video References Sidebar                                 */
+  /* ========================================================================= */
+  .reference-sidebar {
+    width: 410px;
+    min-width: 340px;
+    max-width: 460px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: var(--bg-surface);
+    backdrop-filter: blur(20px);
+    border-right: 1px solid var(--border-subtle);
+    position: relative;
+    z-index: 5;
+    overflow: hidden;
+  }
+
+  .sidebar-header {
+    padding: 14px 18px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .sidebar-eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+  }
+  .sidebar-heading {
+    font-size: 14.5px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .sidebar-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border-subtle);
+    padding: 2px 7px;
+    border-radius: var(--radius-pill);
+    color: var(--text-secondary);
+  }
+
+  /* Live Filter Search */
+  .search-container {
+    padding: 10px 18px;
+    border-bottom: 1px dashed var(--border-dashed);
+  }
+  .search-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-pill);
+    padding: 7px 14px;
+    transition: all 0.2s ease;
+  }
+  .search-box:focus-within {
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.05);
+  }
+  .search-box svg {
+    width: 14px;
+    height: 14px;
+    fill: var(--text-muted);
+    flex-shrink: 0;
+  }
+  .search-input {
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 12.5px;
+    outline: none;
+    width: 100%;
+  }
+  .search-input::placeholder {
+    color: var(--text-muted);
+  }
+  .kbd-hint {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--border-subtle);
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: var(--text-muted);
+  }
+
+  /* Sidebar Navigation Tabs */
+  .sidebar-tabs {
+    display: flex;
+    gap: 6px;
+    padding: 10px 18px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .tab-pill {
+    flex: 1;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 500;
+    padding: 6px 12px;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .tab-pill:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.04);
+  }
+  .tab-pill.active {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  /* Scrollable Sidebar Content Area */
+  .sidebar-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .sidebar-scroll::-webkit-scrollbar { width: 5px; }
+  .sidebar-scroll::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 3px; }
+
+  /* Canvas UI Video Player Card */
+  .player-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-card);
+    padding: 12px;
+    display: none;
+    box-shadow: 0 10px 24px -6px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(12px);
+    transition: all 0.2s ease;
+  }
+  .player-card.active { display: block; }
+  .player-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .player-title {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 220px;
+  }
+  .player-time-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #34d399;
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  video {
+    width: 100%;
+    max-height: 220px;
+    background: #000;
+    border-radius: 8px;
+    outline: none;
+    border: 1px solid var(--border-subtle);
+  }
+
+  /* Citation Cards (Canvas UI style) */
+  .citation-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-card);
+    padding: 14px;
+    transition: all 0.2s cubic-bezier(0.23, 1, 0.32, 1);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+  }
+  .citation-card:hover {
+    background: var(--bg-card-hover);
+    border-color: rgba(255, 255, 255, 0.18);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px -4px rgba(0, 0, 0, 0.4);
+  }
+  .citation-card.highlight {
+    border-color: #10b981;
+    background: rgba(16, 185, 129, 0.06);
+    box-shadow: 0 0 16px rgba(16, 185, 129, 0.2);
+  }
+  .card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .card-label-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--border-subtle);
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+  .card-video-title {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+  }
+  .ts-play-btn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    font-weight: 500;
+    color: #34d399;
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    padding: 3px 8px;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+  }
+  .ts-play-btn:hover {
+    background: #10b981;
+    color: #fff;
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+  }
+  .card-snippet {
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+  }
+  .card-metrics {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--text-muted);
+  }
+
+  /* Upload Box & Library View */
+  .upload-box {
+    border: 1px dashed var(--border-dashed);
+    border-radius: var(--radius-card);
+    padding: 24px 16px;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.02);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .upload-box:hover {
+    border-color: #10b981;
+    background: rgba(16, 185, 129, 0.04);
+  }
+  .upload-icon {
+    font-size: 24px;
+    margin-bottom: 6px;
+  }
+  .upload-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .upload-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+    margin-top: 4px;
+  }
+  .file-input { display: none; }
+
+  /* Upload & Whisper Processing Progress Bar */
+  .upload-progress-container {
+    margin-top: 10px;
+    background: rgba(18, 18, 22, 0.95);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: none;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  }
+  .progress-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    margin-bottom: 7px;
+  }
+  .progress-status-text {
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 250px;
+    font-weight: 500;
+  }
+  .progress-pct {
+    color: #34d399;
+    font-weight: 600;
+  }
+  .progress-track {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-pill);
+    overflow: hidden;
+    position: relative;
+  }
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #10b981, #06b6d4);
+    border-radius: var(--radius-pill);
+    transition: width 0.2s ease;
+  }
+  .progress-fill.processing {
+    width: 100% !important;
+    background: linear-gradient(90deg, #10b981, #06b6d4, #10b981);
+    background-size: 200% 100%;
+    animation: progressStripe 1.5s linear infinite;
+  }
+  .progress-subtext {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--text-muted);
+    margin-top: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  @keyframes progressStripe {
+    0% { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
+  }
+
+  .doc-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .doc-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    transition: all 0.15s ease;
+  }
+  .doc-item:hover {
+    background: var(--bg-card-hover);
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+  .doc-meta { overflow: hidden; }
+  .doc-title {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .doc-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .btn-del {
+    background: transparent;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    padding: 3px 7px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-del:hover {
+    background: rgba(239, 68, 68, 0.15);
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 36px 16px;
+    color: var(--text-muted);
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+
+  /* ========================================================================= */
+  /* RIGHT: Modern Canvas UI Conversational Chat                               */
+  /* ========================================================================= */
+  .chat-pane {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    position: relative;
+    background: transparent;
+    overflow: hidden;
+  }
+
+  /* Chat Thread Header */
+  .chat-header {
+    height: 60px;
+    background: rgba(9, 9, 11, 0.65);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    z-index: 10;
+  }
+  .contact-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .contact-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: var(--radius-pill);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
+    border: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .contact-name {
+    font-size: 14.5px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .contact-status {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .btn-icon {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-pill);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+  }
+  .btn-icon:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  /* Chat Message Area */
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    scroll-behavior: smooth;
+  }
+  .chat-messages::-webkit-scrollbar { width: 6px; }
+  .chat-messages::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 3px; }
+
+  /* System Notice Badge */
+  .system-badge {
+    align-self: center;
+    background: rgba(18, 18, 22, 0.8);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 6px 14px;
+    border-radius: var(--radius-pill);
+    max-width: 85%;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* Message Bubbles */
+  .bubble-row {
+    display: flex;
+    width: 100%;
+  }
+  .bubble-row.outgoing { justify-content: flex-end; }
+  .bubble-row.incoming { justify-content: flex-start; }
+
+  .bubble {
+    max-width: 76%;
+    padding: 12px 16px;
+    border-radius: var(--radius-card);
+    font-size: 14px;
+    line-height: 1.55;
+    position: relative;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    word-wrap: break-word;
+    backdrop-filter: blur(14px);
+  }
+  .bubble.outgoing {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: #fff;
+    border-bottom-right-radius: 4px;
+  }
+  .bubble.incoming {
+    background: rgba(18, 18, 22, 0.85);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+    border-bottom-left-radius: 4px;
+  }
+
+  .bubble-text {
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .bubble-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--text-muted);
+  }
+
+  .cite-badge {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 1px 7px;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    margin: 0 3px;
+    transition: all 0.15s ease;
+    text-decoration: none;
+  }
+  .cite-badge:hover {
+    background: #10b981;
+    color: #fff;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+  }
+
+  .grounded-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: var(--radius-pill);
+  }
+  .grounded-tag.verified {
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    color: #34d399;
+  }
+  .grounded-tag.unverified {
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    color: #fbbf24;
+  }
+
+  /* Typing Dot Indicator */
+  .typing-bubble {
+    background: rgba(18, 18, 22, 0.85);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-card);
+    padding: 10px 16px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .typing-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    animation: typingBounce 1.4s infinite ease-in-out;
+  }
+  .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes typingBounce {
+    0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+    40% { transform: translateY(-4px); opacity: 1; }
+  }
+
+  /* Suggestions Bar */
+  .suggestions-bar {
+    padding: 8px 32px;
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    background: transparent;
+  }
+  .suggestions-bar::-webkit-scrollbar { display: none; }
+  .sugg-chip {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    font-size: 12px;
+    padding: 6px 14px;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+  }
+  .sugg-chip:hover {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #fff;
+    transform: translateY(-1px);
+  }
+
+  /* Chat Input Footer Capsule */
+  .chat-footer-wrap {
+    padding: 12px 32px 24px;
+    background: transparent;
+  }
+  .chat-footer {
+    background: rgba(18, 18, 22, 0.85);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--border-subtle);
+    border-radius: 20px;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.6);
+    transition: border-color 0.2s;
+  }
+  .chat-footer:focus-within {
+    border-color: var(--border-focus);
+    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  }
+  .mode-select {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-pill);
+    padding: 7px 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .mode-select:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+  .chat-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    padding: 8px 6px;
+    color: #fff;
+    font-size: 14px;
+    outline: none;
+  }
+  .chat-input::placeholder {
+    color: var(--text-muted);
+  }
+  .send-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-pill);
+    background: #10b981;
+    color: #000;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+  }
+  .send-btn:hover {
+    background: #34d399;
+    transform: scale(1.05);
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+  }
+  .send-btn:active {
+    transform: scale(0.95);
+  }
+
+  /* Mobile Responsive View */
+  .mobile-ref-btn { display: none; }
+  .mobile-close-btn { display: none; }
+  @media (max-width: 860px) {
+    .workspace-body { flex-direction: column; }
+    .chat-pane { flex: 1; width: 100%; }
+    .reference-sidebar {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      width: 100%;
+      max-width: 100%;
+      z-index: 50;
+      display: none;
+    }
+    .reference-sidebar.show-mobile { display: flex; }
+    .mobile-ref-btn { display: inline-flex !important; }
+    .mobile-close-btn { display: inline-flex !important; }
+    .chat-messages { padding: 16px; }
+    .chat-footer-wrap { padding: 8px 16px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HTML5 Interactive Particle Canvas (Canvas UI Background) -->
+<canvas id="bgCanvas"></canvas>
+
+<div class="app-container">
+
+  <!-- ========================================================================= -->
+  <!-- TOP NAVIGATION BAR (Canvas UI Header)                                     -->
+  <!-- ========================================================================= -->
+  <header class="top-navbar">
+    <div class="nav-left">
+      <a href="/" class="brand-logo">
+        <div class="logo-icon-wrap">
+          <svg viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>
+        </div>
+        <span class="brand-title">VideoRAG</span>
+      </a>
+      <span class="pill-badge">Timestamped Video Search</span>
+    </div>
+
+    <div class="nav-right">
+      <div class="status-pill" id="connStatus">
+        <span class="status-dot-pulse"></span>
+        <span id="modelInfo">online • Ollama (qwen2.5:3b-instruct)</span>
+      </div>
+      <button class="btn-icon" id="clearChatBtn" title="Clear Chat History">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ========================================================================= -->
+  <!-- MAIN WORKSPACE                                                            -->
+  <!-- ========================================================================= -->
+  <div class="workspace-body">
+
+    <!-- ======================================================================= -->
+    <!-- LEFT: Documents & References Sidebar                                    -->
+    <!-- ======================================================================= -->
+    <aside class="reference-sidebar" id="refSidebar">
+      <!-- Crosshair corner decorative marks -->
+      <span class="crosshair-corner crosshair-tl"></span>
+      <span class="crosshair-corner crosshair-tr"></span>
+
+      <!-- Sidebar Header -->
+      <div class="sidebar-header">
+        <div>
+          <div class="sidebar-eyebrow">Evidence & Media</div>
+          <div class="sidebar-heading">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+            References
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span class="sidebar-count" id="libStatCount">0 Docs</span>
+          <button class="btn-icon mobile-close-btn" id="mobileCloseRef" title="Close References">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Live Search / Filter Input -->
+      <div class="search-container">
+        <div class="search-box">
+          <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+          <input type="text" id="filterInput" class="search-input" placeholder="Search references or media...">
+          <span class="kbd-hint">/</span>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs: Citations vs Library -->
+      <div class="sidebar-tabs">
+        <button class="tab-pill active" id="tabCitations">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+          Citations
+        </button>
+        <button class="tab-pill" id="tabLibrary">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+          Video Library
+        </button>
+      </div>
+
+      <!-- Sidebar Scroll Area -->
+      <div class="sidebar-scroll">
+
+        <!-- Embedded Video Player Card -->
+        <div class="player-card" id="playerCard">
+          <div class="player-header">
+            <span class="player-title" id="playerVideoTitle">Playback</span>
+            <span class="player-time-tag" id="playerTimeTag">00:00</span>
+          </div>
+          <video id="videoPlayer" controls></video>
+        </div>
+
+        <!-- Tab 1: Citations View -->
+        <div id="citationsView">
+          <div id="citationList">
+            <div class="empty-state">
+              Ask a question in the chat to see relevant video excerpts, confidence scores, and deep-link citations here.
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 2: Library & Upload View -->
+        <div id="libraryView" style="display: none;">
+          <!-- Whisper Speed Mode -->
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; font-family:'JetBrains Mono',monospace; font-size:10.5px;">
+            <span style="color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em;">Whisper Speed:</span>
+            <select id="whisperSpeedSelect" class="mode-select" style="padding:4px 8px; font-size:11px;">
+              <option value="base" selected>⚡ Fast (base · 1-2 min)</option>
+              <option value="tiny">🚀 Ultra Fast (tiny · seconds)</option>
+              <option value="small">🎯 Precision (small)</option>
+            </select>
+          </div>
+
+          <!-- Upload Box -->
+          <div class="upload-box" id="dropZone">
+            <div class="upload-icon">✦</div>
+            <div class="upload-title">Add Video or Document</div>
+            <div class="upload-sub">.mp4 · .mov · .mp3 · .pdf · .txt · .md · .srt</div>
+            <input type="file" id="filePicker" class="file-input" accept=".json,.srt,.vtt,.mp4,.mkv,.mov,.webm,.mp3,.wav,.m4a,.pdf,.txt,.md,.markdown">
+          </div>
+
+          <!-- Web Scraper Box -->
+          <div class="scrape-box" style="margin-top: 10px; background: rgba(255, 255, 255, 0.02); border: 1px dashed var(--border-subtle); border-radius: var(--radius-lg); padding: 12px 14px;">
+            <div style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--text-muted); margin-bottom:8px; display:flex; align-items:center; justify-content:space-between;">
+              <span style="letter-spacing:0.04em;">🌐 SCRAPE WEBSITE / ARTICLE</span>
+              <span style="font-size:9.5px; background:rgba(255,255,255,0.05); padding:2px 6px; border-radius:4px; color:var(--text-secondary);">Scrapy Engine</span>
+            </div>
+            <div style="display:flex; gap:6px;">
+              <input type="url" id="scrapeUrlInput" placeholder="https://..." style="flex:1; background:rgba(0,0,0,0.3); border:1px solid var(--border-subtle); border-radius:var(--radius-md); padding:7px 10px; color:#fff; font-size:12px; outline:none; font-family:'JetBrains Mono',monospace;">
+              <button type="button" id="scrapeUrlBtn" style="background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); color:#fff; border-radius:var(--radius-md); padding:7px 12px; font-size:12px; cursor:pointer; font-weight:500; transition:background 0.15s;">
+                Ingest
+              </button>
+            </div>
+            <div id="scrapeStatus" style="font-family:'JetBrains Mono',monospace; font-size:11px; margin-top:6px; display:none;"></div>
+          </div>
+
+          <!-- Upload & Transcription Progress Bar -->
+          <div class="upload-progress-container" id="uploadProgressBox">
+            <div class="progress-info">
+              <span class="progress-status-text" id="progressStatusText">Uploading file...</span>
+              <span class="progress-pct" id="progressPctText">0%</span>
+            </div>
+            <div class="progress-track">
+              <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-subtext" id="progressSubText">Preparing...</div>
+          </div>
+          <div id="uploadStatus" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#34d399;margin-top:6px;text-align:center;"></div>
+
+          <!-- Video & Document Item List -->
+          <div style="margin-top: 14px;">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em;">Indexed Knowledge Sources</div>
+            <div class="doc-list" id="docList"></div>
+          </div>
+        </div>
+
+      </div>
+    </aside>
+
+    <!-- ======================================================================= -->
+    <!-- RIGHT: WhatsApp / Conversational Chat on Active Topic                   -->
+    <!-- ======================================================================= -->
+    <main class="chat-pane" id="chatPane">
+      <!-- Chat Sub-Header -->
+      <div class="chat-header">
+        <div class="contact-info">
+          <button class="btn-icon mobile-ref-btn" id="mobileRefToggle" title="View Document References">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path></svg>
+          </button>
+          <div class="contact-avatar">▶</div>
+          <div>
+            <div class="contact-name">
+              VideoRAG Assistant
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="#10b981"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+            </div>
+            <div class="contact-status">
+              <span>Grounded video Q&A with timestamp deep-links</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Messages Stream -->
+      <div class="chat-messages" id="messageList">
+        <div class="system-badge">
+          🔒 End-to-end grounded video search. Answers are cited with verified timestamped excerpts.
+        </div>
+
+        <!-- Welcome Message -->
+        <div class="bubble-row incoming">
+          <div class="bubble incoming">
+            <div class="bubble-text">Hello! I am your timestamped video assistant. Ask me anything about your video library, and I will find the exact moments and cite the video timestamps for you.</div>
+            <div class="bubble-footer">
+              <span class="grounded-tag verified">Ready</span>
+              <span id="welcomeTime">12:00</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Question Suggestion Chips -->
+      <div class="suggestions-bar">
+        <button class="sugg-chip" data-q="How do I request a refund?">💡 How to request refund?</button>
+        <button class="sugg-chip" data-q="What port does RTMP use?">💡 What port does RTMP use?</button>
+        <button class="sugg-chip" data-q="What should the video bitrate be for a 1080p stream?">💡 1080p video bitrate?</button>
+        <button class="sugg-chip" data-q="How does adaptive bitrate switching work?">💡 Adaptive bitrate?</button>
+      </div>
+
+      <!-- Chat Input Capsule -->
+      <div class="chat-footer-wrap">
+        <form class="chat-footer" id="chatForm">
+          <select class="mode-select" id="modeSelect" title="Retrieval Strategy">
+            <option value="hybrid">⚡ Hybrid (Dense + BM25)</option>
+            <option value="dense">🧠 Dense Vectors</option>
+            <option value="bm25">🔍 BM25 Keyword</option>
+          </select>
+
+          <input
+            type="text"
+            id="userInput"
+            class="chat-input"
+            placeholder="Type a question about your videos..."
+            autocomplete="off"
+            autofocus
+          />
+
+          <button type="submit" class="send-btn" id="sendBtn" title="Send message">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+            </svg>
+          </button>
+        </form>
+      </div>
+    </main>
+
+  </div>
+
+</div>
+
+<!-- ========================================================================= -->
+<!-- Canvas UI & Application Logic                                             -->
+<!-- ========================================================================= -->
+<script>
+  // DOM References
+  const $ = (id) => document.getElementById(id);
+  const messageList = $("messageList");
+  const chatForm = $("chatForm");
+  const userInput = $("userInput");
+  const modeSelect = $("modeSelect");
+  const citationList = $("citationList");
+  const docList = $("docList");
+  const videoPlayer = $("videoPlayer");
+  const playerCard = $("playerCard");
+  const playerVideoTitle = $("playerVideoTitle");
+  const playerTimeTag = $("playerTimeTag");
+  const tabCitations = $("tabCitations");
+  const tabLibrary = $("tabLibrary");
+  const citationsView = $("citationsView");
+  const libraryView = $("libraryView");
+  const filePicker = $("filePicker");
+  const dropZone = $("dropZone");
+  const uploadStatus = $("uploadStatus");
+  const modelInfo = $("modelInfo");
+  const libStatCount = $("libStatCount");
+  const filterInput = $("filterInput");
+  const refSidebar = $("refSidebar");
+  const mobileRefToggle = $("mobileRefToggle");
+  const mobileCloseRef = $("mobileCloseRef");
+
+  // ===========================================================================
+  // Interactive Background Canvas Effect (Canvas UI Signature)
+  // ===========================================================================
+  (function initCanvasBackground() {
+    const canvas = document.getElementById("bgCanvas");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    let width, height, particles = [];
+    const PARTICLE_COUNT = 45;
+
+    function resize() {
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+    }
+    window.addEventListener("resize", resize);
+    resize();
+
+    class Particle {
+      constructor() {
+        this.x = Math.random() * width;
+        this.y = Math.random() * height;
+        this.vx = (Math.random() - 0.5) * 0.4;
+        this.vy = (Math.random() - 0.5) * 0.4;
+        this.radius = Math.random() * 1.5 + 0.8;
+      }
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        if (this.x < 0) this.x = width;
+        if (this.x > width) this.x = 0;
+        if (this.y < 0) this.y = height;
+        if (this.y > height) this.y = 0;
+      }
+      draw() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(255, 255, 255, 0.25)";
+        ctx.fill();
+      }
+    }
+
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      particles.push(new Particle());
+    }
+
+    function animate() {
+      ctx.clearRect(0, 0, width, height);
+
+      // Draw subtle connecting lines
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x;
+          const dy = particles[i].y - particles[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 120) {
+            ctx.beginPath();
+            ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            ctx.strokeStyle = `rgba(255, 255, 255, ${0.08 * (1 - dist / 120)})`;
+            ctx.lineWidth = 0.75;
+            ctx.stroke();
+          }
+        }
+      }
+
+      particles.forEach(p => {
+        p.update();
+        p.draw();
+      });
+
+      requestAnimationFrame(animate);
+    }
+    animate();
+  })();
+
+  // Format local clock time HH:MM
+  function getNowTime() {
+    const d = new Date();
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  $("welcomeTime").textContent = getNowTime();
+
+  // Helper API fetch
+  async function api(path, options = {}) {
+    const res = await fetch(path, options);
+    if (!res.ok) {
+      let detail = res.statusText;
+      try { detail = (await res.json()).detail || detail; } catch (_) {}
+      throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+    }
+    return res.status === 204 ? null : res.json();
+  }
+
+  // Escape HTML to prevent injection
+  function escapeHtml(text) {
+    const p = document.createElement("p");
+    p.textContent = text;
+    return p.innerHTML;
+  }
+
+  // Switch Tabs in Left Sidebar
+  tabCitations.addEventListener("click", () => {
+    tabCitations.classList.add("active");
+    tabLibrary.classList.remove("active");
+    citationsView.style.display = "block";
+    libraryView.style.display = "none";
+  });
+  tabLibrary.addEventListener("click", () => {
+    tabLibrary.classList.add("active");
+    tabCitations.classList.remove("active");
+    libraryView.style.display = "block";
+    citationsView.style.display = "none";
+  });
+
+  // Filter Citations & Documents in Real Time
+  if (filterInput) {
+    filterInput.addEventListener("input", () => {
+      const q = filterInput.value.toLowerCase().trim();
+      document.querySelectorAll(".citation-card").forEach(card => {
+        const txt = card.textContent.toLowerCase();
+        card.style.display = txt.includes(q) ? "" : "none";
+      });
+      document.querySelectorAll(".doc-item").forEach(item => {
+        const txt = item.textContent.toLowerCase();
+        item.style.display = txt.includes(q) ? "" : "none";
+      });
+    });
+  }
+
+  // Quick keyboard shortcut "/" for search input
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "/" && document.activeElement !== userInput && document.activeElement !== filterInput) {
+      e.preventDefault();
+      filterInput.focus();
+    }
+  });
+
+  // Mobile References Sidebar Toggle
+  if (mobileRefToggle && refSidebar) {
+    mobileRefToggle.addEventListener("click", () => {
+      refSidebar.classList.add("show-mobile");
+    });
+  }
+  if (mobileCloseRef && refSidebar) {
+    mobileCloseRef.addEventListener("click", () => {
+      refSidebar.classList.remove("show-mobile");
+    });
+  }
+
+  // Append User message
+  function appendUserMessage(text) {
+    const row = document.createElement("div");
+    row.className = "bubble-row outgoing";
+    row.innerHTML = `
+      <div class="bubble outgoing">
+        <div class="bubble-text">${escapeHtml(text)}</div>
+        <div class="bubble-footer" style="justify-content: flex-end;">
+          <span>${getNowTime()}</span>
+        </div>
+      </div>
+    `;
+    messageList.appendChild(row);
+    messageList.scrollTop = messageList.scrollHeight;
+  }
+
+  // Append AI message with clickable citation badges
+  function appendAIMessage(answerText, mode, grounded, citations = []) {
+    let formattedHtml = escapeHtml(answerText);
+    formattedHtml = formattedHtml.replace(/\[(\d+)\]/g, (match, p1) => {
+      return `<button type="button" class="cite-badge" onclick="highlightCitation(${p1})">[${p1}]</button>`;
+    });
+
+    const groundedLabel = grounded ? "Grounded" : "Unverified";
+    const groundedClass = grounded ? "verified" : "unverified";
+
+    const row = document.createElement("div");
+    row.className = "bubble-row incoming";
+    row.innerHTML = `
+      <div class="bubble incoming">
+        <div class="bubble-text">${formattedHtml}</div>
+        <div class="bubble-footer">
+          <span class="grounded-tag ${groundedClass}">
+            ${grounded ? '✓ ' + groundedLabel : '⚠️ ' + groundedLabel} · ${mode}
+          </span>
+          <span>${getNowTime()}</span>
+        </div>
+      </div>
+    `;
+    messageList.appendChild(row);
+    messageList.scrollTop = messageList.scrollHeight;
+  }
+
+  // Typing indicator
+  let typingEl = null;
+  function showTyping() {
+    if (typingEl) return;
+    typingEl = document.createElement("div");
+    typingEl.className = "bubble-row incoming";
+    typingEl.innerHTML = `
+      <div class="typing-bubble">
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+      </div>
+    `;
+    messageList.appendChild(typingEl);
+    messageList.scrollTop = messageList.scrollHeight;
+  }
+  function hideTyping() {
+    if (typingEl) {
+      typingEl.remove();
+      typingEl = null;
+    }
+  }
+
+  // Seek video and play
+  function seekToHit(hit) {
+    if (!hit.media_url) {
+      alert(`No video file associated with "${hit.video_title}". You can still inspect the timestamp text.`);
+      return;
+    }
+    const fullUrl = new URL(hit.media_url, location.href).href;
+    playerCard.classList.add("active");
+    playerVideoTitle.textContent = hit.video_title;
+    playerTimeTag.textContent = `${hit.start_label} - ${hit.end_label}`;
+
+    if (videoPlayer.dataset.src !== fullUrl) {
+      videoPlayer.src = fullUrl;
+      videoPlayer.dataset.src = fullUrl;
+    }
+    const playAtTime = () => {
+      videoPlayer.currentTime = hit.start;
+      videoPlayer.play().catch(() => {});
+    };
+    if (videoPlayer.readyState >= 1) {
+      playAtTime();
+    } else {
+      videoPlayer.addEventListener("loadedmetadata", playAtTime, { once: true });
+    }
+    playerCard.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  // Highlight citation card from [n] badge click
+  window.highlightCitation = function(n) {
+    if (refSidebar && window.innerWidth <= 860) {
+      refSidebar.classList.add("show-mobile");
+    }
+    tabCitations.click();
+    const card = $(`citeCard-${n}`);
+    if (card) {
+      document.querySelectorAll(".citation-card").forEach(c => c.classList.remove("highlight"));
+      card.classList.add("highlight");
+      card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      const playBtn = card.querySelector(".ts-play-btn");
+      if (playBtn) playBtn.click();
+    }
+  };
+
+  // Render Citations in Left Sidebar
+  function renderCitations(citations) {
+    if (!citations || !citations.length) {
+      citationList.innerHTML = `<div class="empty-state">No matching excerpts found for this query.</div>`;
+      return;
+    }
+    citationList.innerHTML = "";
+    citations.forEach((c) => {
+      const card = document.createElement("div");
+      card.className = "citation-card";
+      card.id = `citeCard-${c.n || 1}`;
+
+      const denseStr = c.dense_score != null ? ` · cos ${c.dense_score.toFixed(3)}` : "";
+      const scoreStr = c.score != null ? `score ${c.score.toFixed(4)}` : "";
+
+      card.innerHTML = `
+        <div class="card-top">
+          <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
+            <span class="card-label-badge">[${c.n || 1}]</span>
+            <span class="card-video-title" title="${escapeHtml(c.video_title)}">${escapeHtml(c.video_title)}</span>
+          </div>
+          <button type="button" class="ts-play-btn">
+            ▶ ${c.start_label || '00:00'} - ${c.end_label || '00:00'}
+          </button>
+        </div>
+        <div class="card-snippet">${escapeHtml(c.text)}</div>
+        <div class="card-metrics">
+          <span>${scoreStr}${denseStr}</span>
+        </div>
+      `;
+
+      card.querySelector(".ts-play-btn").addEventListener("click", () => {
+        document.querySelectorAll(".citation-card").forEach(el => el.classList.remove("highlight"));
+        card.classList.add("highlight");
+        seekToHit(c);
+      });
+
+      citationList.appendChild(card);
+    });
+
+    tabCitations.click();
+  }
+
+  // Main Ask / Search Flow
+  async function submitQuery(queryText) {
+    const q = queryText.trim();
+    if (!q) return;
+
+    appendUserMessage(q);
+    userInput.value = "";
+    showTyping();
+
+    try {
+      const data = await api("/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: q, k: 5, mode: modeSelect.value }),
+      });
+      hideTyping();
+      appendAIMessage(data.answer, data.mode, data.grounded, data.citations);
+      renderCitations(data.citations);
+    } catch (err) {
+      hideTyping();
+      appendAIMessage(`⚠️ Error reaching VideoRAG service: ${err.message}`, "error", false);
+    }
+  }
+
+  chatForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    submitQuery(userInput.value);
+  });
+
+  // Suggestion chips
+  document.querySelectorAll(".sugg-chip").forEach(btn => {
+    btn.addEventListener("click", () => {
+      submitQuery(btn.dataset.q);
+    });
+  });
+
+  // Clear Chat
+  $("clearChatBtn").addEventListener("click", () => {
+    messageList.innerHTML = `
+      <div class="system-badge">
+        🔒 Chat history cleared. Ready for your next query.
+      </div>
+    `;
+    citationList.innerHTML = `<div class="empty-state">Ask a question in chat to inspect citations here.</div>`;
+    playerCard.classList.remove("active");
+  });
+
+  // Load Library & Health Info
+  async function loadLibrary() {
+    try {
+      const [health, videos] = await Promise.all([api("/health"), api("/videos")]);
+      const activeModel = health.llm_model || "qwen2.5:3b-instruct";
+      const activeProv = health.llm_provider || "ollama";
+      modelInfo.textContent = `online • ${activeProv} (${activeModel})`;
+      libStatCount.textContent = `${health.videos} Sources · ${health.chunks} Chunks`;
+
+      docList.innerHTML = "";
+      if (!videos.length) {
+        docList.innerHTML = `<div class="empty-state">No sources indexed yet. Upload a video, document, or scrape a URL above.</div>`;
+        return;
+      }
+      videos.forEach(v => {
+        const item = document.createElement("div");
+        item.className = "doc-item";
+        const isWeb = v.source && (v.source.startsWith("http://") || v.source.startsWith("https://"));
+        const isDoc = v.source && /\.(pdf|txt|md|markdown)$/i.test(v.source);
+        const typeBadge = isWeb
+          ? '<span style="font-size:9px; background:rgba(6,182,212,0.18); color:#22d3ee; border:1px solid rgba(6,182,212,0.3); padding:1px 5px; border-radius:4px; font-family:\'JetBrains Mono\',monospace; font-weight:600;">WEB</span>'
+          : isDoc
+          ? '<span style="font-size:9px; background:rgba(245,158,11,0.18); color:#fbbf24; border:1px solid rgba(245,158,11,0.3); padding:1px 5px; border-radius:4px; font-family:\'JetBrains Mono\',monospace; font-weight:600;">DOC</span>'
+          : '<span style="font-size:9px; background:rgba(16,185,129,0.18); color:#34d399; border:1px solid rgba(16,185,129,0.3); padding:1px 5px; border-radius:4px; font-family:\'JetBrains Mono\',monospace; font-weight:600;">VIDEO</span>';
+
+        item.innerHTML = `
+          <div class="doc-meta">
+            <div style="display:flex; align-items:center; gap:6px;">
+              ${typeBadge}
+              <div class="doc-title" title="${escapeHtml(v.title)}">${escapeHtml(v.title)}</div>
+            </div>
+            <div class="doc-sub">${v.n_chunks} chunks${v.duration ? ` · ${Math.round(v.duration)}s` : ''}</div>
+          </div>
+          <button type="button" class="btn-del">Delete</button>
+        `;
+        item.querySelector(".btn-del").addEventListener("click", async () => {
+          if (confirm(`Remove "${v.title}" from library?`)) {
+            await api(`/videos/${encodeURIComponent(v.video_id)}`, { method: "DELETE" });
+            loadLibrary();
+          }
+        });
+        docList.appendChild(item);
+      });
+    } catch (e) {
+      modelInfo.textContent = `offline • ${e.message}`;
+    }
+  }
+
+  // Web Scraping via Scrapy Endpoint
+  const scrapeUrlBtn = $("scrapeUrlBtn");
+  const scrapeUrlInput = $("scrapeUrlInput");
+  const scrapeStatus = $("scrapeStatus");
+
+  if (scrapeUrlBtn && scrapeUrlInput) {
+    scrapeUrlBtn.addEventListener("click", async () => {
+      const url = (scrapeUrlInput.value || "").trim();
+      if (!url) return;
+      if (!url.startsWith("http://") && !url.startsWith("https://")) {
+        scrapeStatus.style.display = "block";
+        scrapeStatus.style.color = "#ef4444";
+        scrapeStatus.textContent = "Please enter a valid URL starting with http:// or https://";
+        return;
+      }
+
+      scrapeUrlBtn.disabled = true;
+      scrapeUrlBtn.textContent = "Scraping...";
+      scrapeStatus.style.display = "block";
+      scrapeStatus.style.color = "#38bdf8";
+      scrapeStatus.textContent = "Extracting article with Scrapy...";
+
+      try {
+        const res = await api("/websites", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        });
+        scrapeStatus.style.color = "#34d399";
+        scrapeStatus.textContent = `✓ Indexed ${res.n_chunks || 0} chunks from website!`;
+        scrapeUrlInput.value = "";
+        loadLibrary();
+        setTimeout(() => { scrapeStatus.style.display = "none"; }, 5000);
+      } catch (err) {
+        scrapeStatus.style.color = "#ef4444";
+        scrapeStatus.textContent = `⚠️ Scraping failed: ${err.message}`;
+      } finally {
+        scrapeUrlBtn.disabled = false;
+        scrapeUrlBtn.textContent = "Ingest";
+      }
+    });
+
+    scrapeUrlInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        scrapeUrlBtn.click();
+      }
+    });
+  }
+
+  // Upload with Real-Time Progress Bar
+  const uploadProgressBox = $("uploadProgressBox");
+  const progressStatusText = $("progressStatusText");
+  const progressPctText = $("progressPctText");
+  const progressFill = $("progressFill");
+  const progressSubText = $("progressSubText");
+
+  dropZone.addEventListener("click", () => filePicker.click());
+  filePicker.addEventListener("change", () => {
+    const file = filePicker.files[0];
+    if (!file) return;
+
+    uploadProgressBox.style.display = "block";
+    uploadStatus.textContent = "";
+    progressFill.classList.remove("processing");
+    progressFill.style.background = "";
+    progressFill.style.width = "0%";
+    progressStatusText.textContent = `Uploading "${file.name}"`;
+    progressPctText.textContent = "0%";
+    progressSubText.textContent = "Starting upload...";
+
+    const isMedia = /\.(mp4|mkv|mov|webm|avi|m4v|mp3|wav|m4a|flac|ogg)$/i.test(file.name);
+    const isDoc = /\.(pdf|txt|md|markdown)$/i.test(file.name);
+    const taskId = "up_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
+    const body = new FormData();
+    body.append("file", file);
+    body.append("task_id", taskId);
+    const speedSelect = $("whisperSpeedSelect");
+    if (speedSelect) {
+      body.append("whisper_model", speedSelect.value);
+    }
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/videos", true);
+
+    let pollInterval = null;
+    const startTime = Date.now();
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        const pct = Math.min(99, Math.round((e.loaded / e.total) * 100));
+        progressFill.style.width = pct + "%";
+        progressPctText.textContent = pct + "%";
+        const mbLoaded = (e.loaded / (1024 * 1024)).toFixed(1);
+        const mbTotal = (e.total / (1024 * 1024)).toFixed(1);
+        progressSubText.textContent = `Uploading: ${mbLoaded} MB / ${mbTotal} MB (${pct}%)`;
+
+        if (pct >= 99) {
+          progressStatusText.textContent = isMedia
+            ? "Extracting audio & preparing Whisper..."
+            : isDoc
+            ? "Extracting document pages & embedding..."
+            : "Indexing segments...";
+          progressPctText.textContent = "100% Uploaded";
+          progressFill.classList.add("processing");
+        }
+      }
+    };
+
+    xhr.upload.onload = () => {
+      progressFill.classList.add("processing");
+      progressStatusText.textContent = isMedia
+        ? "Transcribing with Whisper..."
+        : isDoc
+        ? "Parsing document content..."
+        : "Indexing segments...";
+      progressPctText.textContent = isMedia ? "Starting..." : "Indexing...";
+
+      // Poll server progress
+      pollInterval = setInterval(async () => {
+        const elapsed = Math.max(1, Math.floor((Date.now() - startTime) / 1000));
+        try {
+          const res = await api(`/videos/progress/${taskId}`);
+          if (res && res.status === "transcribing" && res.total_seconds > 0) {
+            progressFill.classList.remove("processing");
+            progressFill.style.width = res.percent + "%";
+            progressPctText.textContent = res.percent + "%";
+            progressStatusText.textContent = "Transcribing with Whisper...";
+            progressSubText.textContent = `Completed ${res.current_label} / ${res.total_label} (${res.percent}% done · ${elapsed}s elapsed)`;
+          } else if (res && res.status === "completed") {
+            progressFill.style.width = "100%";
+            progressPctText.textContent = "100%";
+          } else {
+            progressSubText.textContent = isMedia
+              ? `Extracting audio & initializing Whisper (${elapsed}s elapsed)...`
+              : `Indexing segments (${elapsed}s elapsed)...`;
+          }
+        } catch (_) {
+          // If poll fails, show elapsed timer
+          progressSubText.textContent = isMedia
+            ? `Transcribing speech with Whisper (${elapsed}s elapsed)...`
+            : `Indexing chunks (${elapsed}s elapsed)...`;
+        }
+      }, 750);
+    };
+
+    xhr.onload = () => {
+      if (pollInterval) clearInterval(pollInterval);
+      progressFill.classList.remove("processing");
+
+      if (xhr.status >= 200 && xhr.status < 300) {
+        let r = {};
+        try { r = JSON.parse(xhr.responseText); } catch (_) {}
+        progressFill.style.width = "100%";
+        progressFill.style.background = "linear-gradient(90deg, #10b981, #06b6d4)";
+        progressStatusText.textContent = `✓ Indexed successfully!`;
+        progressPctText.textContent = "100%";
+        progressSubText.textContent = `Added ${r.n_chunks || 0} timestamped chunks from "${r.title || file.name}".`;
+        loadLibrary();
+        setTimeout(() => {
+          uploadProgressBox.style.display = "none";
+          filePicker.value = "";
+        }, 6000);
+      } else {
+        progressFill.style.width = "100%";
+        progressFill.style.background = "#ef4444";
+        let detail = xhr.statusText;
+        try {
+          const resJson = JSON.parse(xhr.responseText);
+          detail = resJson.detail || detail;
+        } catch (_) {}
+        progressStatusText.textContent = "Processing Failed";
+        progressPctText.textContent = "Error";
+        progressSubText.textContent = typeof detail === "string" ? detail : JSON.stringify(detail);
+      }
+    };
+
+    xhr.onerror = () => {
+      if (pollInterval) clearInterval(pollInterval);
+      progressFill.classList.remove("processing");
+      progressFill.style.width = "100%";
+      progressFill.style.background = "#ef4444";
+      progressStatusText.textContent = "Network error";
+      progressPctText.textContent = "Failed";
+      progressSubText.textContent = "Connection to server was interrupted.";
+    };
+
+    xhr.send(body);
+  });
+
+  loadLibrary();
+</script>
+</body>
+</html>
